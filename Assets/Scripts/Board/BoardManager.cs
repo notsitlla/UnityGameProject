@@ -52,8 +52,7 @@ public class BoardManager : MonoBehaviour
         if (!boardHighlightPanels.ContainsKey(miniBoardIndex))
         {
             GameObject hl = Instantiate(highlightPrefab, centerPosition, Quaternion.identity, transform);
-            // Update this line inside SpawnHighlightObject() in BoardManager.cs
-            hl.transform.localScale = new Vector3(1.95f, 1.95f, 1f);
+            // preserve prefab's configured localScale
             hl.SetActive(false);
             boardHighlightPanels.Add(miniBoardIndex, hl);
         }
