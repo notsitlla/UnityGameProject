@@ -6,71 +6,111 @@ public class Cell : MonoBehaviour
     public int miniBoardIndex;
     public int localIndex;
 
-    private SpriteRenderer spriteRenderer;
+    [Header("Highlight Reference")]
+    public GameObject cellHighlightPrefab; // Reference slot for our new overlay asset
+    private GameObject spawnHighlightInstance;
+
+    private SpriteRenderer baseSpriteRenderer;
+    private SpriteRenderer highlightSpriteRenderer;
     private bool isOccupied = false;
 
-    // Vector targets for handling smooth scaling animations
-    private Vector3 targetScale = new Vector3(0.9f, 0.9f, 1f);
-    private Color32 baseColor = new Color32(45, 52, 73, 255);
-    private Color32 targetColor;
+    // Smooth hover animation scaling vector values
+    private Vector3 targetHighlightScale = Vector3.zero;
 
     private void Awake()
     {
-        spriteRenderer = GetComponent<SpriteRenderer>();
+        baseSpriteRenderer = GetComponent<SpriteRenderer>();
     }
 
     private void Start()
     {
-        targetColor = baseColor;
-        spriteRenderer.color = baseColor;
+        // 1. Spawn our hover highlight as a child layer asset instantly on initialization
+        if (cellHighlightPrefab != null)
+        {
+            spawnHighlightInstance = Instantiate(cellHighlightPrefab, transform.position, Quaternion.identity, transform);
+            spawnHighlightInstance.transform.localPosition = Vector3.zero;
+            spawnHighlightInstance.transform.localScale = Vector3.zero; // Hide it initially
+            
+            highlightSpriteRenderer = spawnHighlightInstance.GetComponent<SpriteRenderer>();
+        }
     }
 
     private void Update()
     {
-        // Smoothly interpolate scale and color values every single frame!
-        transform.localScale = Vector3.Lerp(transform.localScale, targetScale, Time.deltaTime * 15f);
-        spriteRenderer.color = Color.Lerp(spriteRenderer.color, targetColor, Time.deltaTime * 15f);
+        // 2. Interpolate the scale of the independent highlight asset smoothly every single frame!
+        if (spawnHighlightInstance != null)
+        {
+            spawnHighlightInstance.transform.localScale = Vector3.Lerp(
+                spawnHighlightInstance.transform.localScale, 
+                targetHighlightScale, 
+                Time.deltaTime * 18f
+            );
+        }
     }
 
     private void OnMouseEnter()
     {
         if (isOccupied) return;
-        
-        // Elastic pop up to 102% scale on hover!
-        targetScale = new Vector3(1.02f, 1.02f, 1f);
-        targetColor = new Color32(50, 216, 255, 255); // Neon Cyan glow hover tint
+
+        // Is this cell currently sitting inside a legally valid play zone?
+        int activeBoard = BoardManager.Instance.activeMiniBoard;
+        if (activeBoard != -1 && activeBoard != miniBoardIndex) return;
+
+        // Animate the highlight frame outward to full coverage safely
+        targetHighlightScale = Vector3.one;
     }
 
     private void OnMouseExit()
     {
         if (isOccupied) return;
 
-        // Return gracefully back down to base tile metrics
-        targetScale = new Vector3(0.9f, 0.9f, 1f);
-        targetColor = baseColor;
+        // Collapse the independent highlight scale completely down to hide it
+        targetHighlightScale = Vector3.zero;
     }
 
     private void OnMouseDown()
     {
         if (isOccupied) return;
 
-        // Punch downward slightly on press for tactical sensory response feedback
-        transform.localScale = new Vector3(0.8f, 0.8f, 1f);
+        int activeBoard = BoardManager.Instance.activeMiniBoard;
+        if (activeBoard != -1 && activeBoard != miniBoardIndex) return;
+
+        // Collapse overlay visual instantly when confirmed click drops
+        targetHighlightScale = Vector3.zero;
         BoardManager.Instance.OnCellClicked(this);
     }
 
     public void ClaimCell(Color playerColor)
     {
         isOccupied = true;
-        
-        // If clear color is passed, hide tile background and let token piece show through
+        targetHighlightScale = Vector3.zero;
+
+        if (spawnHighlightInstance != null)
+        {
+            Destroy(spawnHighlightInstance); // Wipe out the hover asset layer to clear memory space
+        }
+
+        // Hide base tile background completely to let the player token pieces pop cleanly
         if (playerColor == Color.clear)
         {
-            spriteRenderer.enabled = false;
+            baseSpriteRenderer.enabled = false;
         }
-        else
+    }
+
+    public void ResetVisual()
+    {
+        isOccupied = false;
+        baseSpriteRenderer.enabled = true;
+        baseSpriteRenderer.color = new Color32(45, 52, 73, 255); // Reset back to default base blue-gray slate
+
+        // Re-initialize overlay child layers safely if reset is called down the road
+        if (spawnHighlightInstance == null && cellHighlightPrefab != null)
         {
-            targetColor = playerColor;
+            spawnHighlightInstance = Instantiate(cellHighlightPrefab, transform.position, Quaternion.identity, transform);
+            spawnHighlightInstance.transform.localPosition = Vector3.zero;
+            spawnHighlightInstance.transform.localScale = Vector3.zero;
+            highlightSpriteRenderer = spawnHighlightInstance.GetComponent<SpriteRenderer>();
         }
+        targetHighlightScale = Vector3.zero;
     }
 }

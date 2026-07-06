@@ -26,6 +26,12 @@ public class BoardManager : MonoBehaviour
     private Dictionary<int, GameObject> boardHighlightPanels = new Dictionary<int, GameObject>();
     private Dictionary<string, Cell> globalCells = new Dictionary<string, Cell>();
 
+    [Header("AI Configuration Settings")]
+    public bool playAgainstAI = true; // Toggle true to test your computer player!
+    private bool isAIThinking = false;
+    // Add this under your globalCells dictionary:
+    private List<GameObject> spawnedPieces = new List<GameObject>();
+
     private void Awake()
     {
         if (Instance == null) Instance = this;
@@ -58,9 +64,15 @@ public class BoardManager : MonoBehaviour
         }
     }
 
-    public void OnCellClicked(Cell clickedCell)
+    public void OnCellClicked(Cell clickedCell, bool force = false)
     {
         if (isGameOver) return;
+
+        // 🌟 RE-ADD THIS GUARD RAIL:
+        // Ignore human click inputs if it's the computer's turn. Allow forced calls (from AI) by passing force=true.
+        if (currentTurn == Player.O && !force) return;
+
+        if (isAIThinking && !force) return; // Block human input while AI is thinking
 
         int bIdx = clickedCell.miniBoardIndex;
         int lIdx = clickedCell.localIndex;
@@ -73,10 +85,14 @@ public class BoardManager : MonoBehaviour
         globalBoardData[bIdx, lIdx] = (currentTurn == Player.X) ? CellState.X : CellState.O;
 
         GameObject tokenPrefab = (currentTurn == Player.X) ? xPrefab : oPrefab;
-        GameObject token = Instantiate(tokenPrefab, clickedCell.transform.position, Quaternion.identity, clickedCell.transform);
-        token.transform.localPosition = Vector3.zero;
         
-        token.transform.localScale = Vector3.zero;
+        // Instantiate token under BoardManager root so it's not affected by cell transforms
+        GameObject token = Instantiate(tokenPrefab, clickedCell.transform.position, Quaternion.identity, transform);
+        token.transform.localScale = Vector3.one;
+
+        // Track spawned pieces for easier cleanup
+        spawnedPieces.Add(token);
+
         StartCoroutine(AnimatePieceSpawn(token.transform));
         clickedCell.ClaimCell(Color.clear); 
 
@@ -93,6 +109,50 @@ public class BoardManager : MonoBehaviour
             {
                 UIManager.Instance.UpdateTurnDisplay(currentTurn == Player.X, currentTurn == Player.X ? colorX : colorO);
             }
+
+            // If it's now the AI's turn and AI mode is enabled, trigger the computer move
+            if (currentTurn == Player.O && playAgainstAI)
+            {
+                if (!isAIThinking)
+                {
+                    StartCoroutine(TriggerComputerMoveRoutine());
+                }
+            }
+        }
+    }
+
+    public void ResetUltimateMatch()
+    {
+        Debug.Log("🔄 Resetting match engine data...");
+
+        // 1. Wipe out all physical token game objects on screen
+        foreach (GameObject piece in spawnedPieces)
+        {
+            if (piece != null)
+            {
+                Destroy(piece);
+            }
+        }
+        spawnedPieces.Clear(); // Empty our lookup list
+
+        // 2. Clear state variables
+        globalBoardData = new CellState[9, 9];
+        miniBoardStates = new BoardState[9];
+        activeMiniBoard = -1;
+        currentTurn = Player.X;
+        isGameOver = false;
+
+        // 3. Reset cell backplates 
+        foreach (var kvp in globalCells)
+        {
+            kvp.Value.ResetVisual();
+        }
+
+        // 4. Update UI displays and outline frames
+        RefreshBoardHighlights();
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.UpdateTurnDisplay(true, colorX);
         }
     }
 
@@ -196,9 +256,10 @@ public class BoardManager : MonoBehaviour
                 string winnerLabel = (player == Player.X) ? "PLAYER X" : "PLAYER O";
                 Debug.Log($"🏆 METAGAME MATCH WINNER IS: {winnerLabel}");
                 
+                // 🌟 FIX: Safely trigger the updated UI manager wrapper method
                 if (UIManager.Instance != null)
                 {
-                    UIManager.Instance.turnText.text = $"{winnerLabel} WINS THE GAME!";
+                    UIManager.Instance.DisplayMatchWinner(winnerLabel, player == Player.X ? colorX : colorO);
                 }
                 
                 activeMiniBoard = -2;
@@ -206,5 +267,38 @@ public class BoardManager : MonoBehaviour
                 return;
             }
         }
+    }
+
+    // AI move coroutine: picks a random valid move after a short delay
+    private System.Collections.IEnumerator TriggerComputerMoveRoutine()
+    {
+        isAIThinking = true;
+        yield return new WaitForSeconds(0.6f); // Premium tactical thinking delay!
+
+        List<Cell> validMoves = new List<Cell>();
+
+        // Scan for all valid available moves left on the field
+        foreach (var kvp in globalCells)
+        {
+            int bIdx = kvp.Value.miniBoardIndex;
+            int lIdx = kvp.Value.localIndex;
+
+            if ((activeMiniBoard == -1 || activeMiniBoard == bIdx) &&
+                miniBoardStates[bIdx] == BoardState.Active &&
+                globalBoardData[bIdx, lIdx] == CellState.Empty)
+            {
+                validMoves.Add(kvp.Value);
+            }
+        }
+
+        // Execute random selection choice for initialization test confirmation
+        if (validMoves.Count > 0 && !isGameOver)
+        {
+            Cell randomChoice = validMoves[Random.Range(0, validMoves.Count)];
+            // Force the move even though isAIThinking is true by passing force=true
+            OnCellClicked(randomChoice, true);
+        }
+
+        isAIThinking = false;
     }
 }

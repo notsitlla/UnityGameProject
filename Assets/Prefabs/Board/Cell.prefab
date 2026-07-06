@@ -81,7 +81,7 @@ SpriteRenderer:
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
-  m_SortingOrder: -1
+  m_SortingOrder: 0
   m_MaskInteraction: 0
   m_Sprite: {fileID: 7482667652216324306, guid: 311925a002f4447b3a28927169b83ea6, type: 3}
   m_Color: {r: 0.1764706, g: 0.20392157, b: 0.28627452, a: 1}
@@ -154,3 +154,4 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Cell
   miniBoardIndex: 0
   localIndex: 0
+  cellHighlightPrefab: {fileID: 6373983535438700330, guid: ca1b43f978b6d43bda649229c5853ce2, type: 3}
