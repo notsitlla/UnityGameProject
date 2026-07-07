@@ -40,6 +40,13 @@ public class BoardManager : MonoBehaviour
     
     private void Start()
     {
+        // Read the cross-scene mode choice set from the main menu!
+        if (GameManager.Instance != null)
+        {
+            // Assumes you have a field like 'playAgainstAI'
+            playAgainstAI = GameManager.Instance.playAgainstAI; 
+        }
+
         if (UIManager.Instance != null)
         {
             UIManager.Instance.UpdateTurnDisplay(currentTurn == Player.X, colorX);
@@ -64,15 +71,24 @@ public class BoardManager : MonoBehaviour
         }
     }
 
-    public void OnCellClicked(Cell clickedCell, bool force = false)
+    public void OnCellClicked(Cell clickedCell)
     {
         if (isGameOver) return;
 
-        // 🌟 RE-ADD THIS GUARD RAIL:
-        // Ignore human click inputs if it's the computer's turn. Allow forced calls (from AI) by passing force=true.
-        if (currentTurn == Player.O && !force) return;
+        // 🌟 FIX: Only block Player O's inputs if we are ACTUALLY playing against the AI!
+        if (currentTurn == Player.O && playAgainstAI) 
+        {
+            return; // Ignore clicks only if it's the computer's turn to think
+        }
 
-        if (isAIThinking && !force) return; // Block human input while AI is thinking
+        // Delegate core move execution to a shared method so AI can call it directly
+        ExecuteMove(clickedCell);
+    }
+
+    // Core move executor — used by both human clicks and AI forced moves
+    private void ExecuteMove(Cell clickedCell)
+    {
+        if (isGameOver) return;
 
         int bIdx = clickedCell.miniBoardIndex;
         int lIdx = clickedCell.localIndex;
@@ -96,27 +112,31 @@ public class BoardManager : MonoBehaviour
         StartCoroutine(AnimatePieceSpawn(token.transform));
         clickedCell.ClaimCell(Color.clear); 
 
+        // 1. Process board rules and state win conditions first
         CheckMiniBoardWin(bIdx, currentTurn);
         CheckMacroGameWin(currentTurn);
 
         if (!isGameOver)
         {
+            // maintain target zone logic before rotating turn
             UpdateActiveTargetZone(lIdx);
-            currentTurn = (currentTurn == Player.X) ? Player.O : Player.X;
-            RefreshBoardHighlights();
 
+            // 2. NOW alternate the active player state value
+            currentTurn = (currentTurn == Player.X) ? Player.O : Player.X;
+
+            // 3. 🌟 RE-POSITION THIS: Always update the screen UI immediately AFTER the turn changes!
             if (UIManager.Instance != null)
             {
                 UIManager.Instance.UpdateTurnDisplay(currentTurn == Player.X, currentTurn == Player.X ? colorX : colorO);
             }
 
-            // If it's now the AI's turn and AI mode is enabled, trigger the computer move
-            if (currentTurn == Player.O && playAgainstAI)
+            // 4. Update the outer active mini-board highlights
+            RefreshBoardHighlights();
+
+            // 5. Finally, pass the baton if playing against the computer
+            if (!isGameOver && currentTurn == Player.O && playAgainstAI)
             {
-                if (!isAIThinking)
-                {
-                    StartCoroutine(TriggerComputerMoveRoutine());
-                }
+                StartCoroutine(TriggerComputerMoveRoutine());
             }
         }
     }
@@ -295,8 +315,8 @@ public class BoardManager : MonoBehaviour
         if (validMoves.Count > 0 && !isGameOver)
         {
             Cell randomChoice = validMoves[Random.Range(0, validMoves.Count)];
-            // Force the move even though isAIThinking is true by passing force=true
-            OnCellClicked(randomChoice, true);
+            // Directly execute the move bypassing the human input guard
+            ExecuteMove(randomChoice);
         }
 
         isAIThinking = false;

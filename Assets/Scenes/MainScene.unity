@@ -827,6 +827,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 22e74143102bc48078d52778fee2c1b8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GameManager
+  playAgainstAI: 0
 --- !u!114 &1448107241
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -869,10 +870,10 @@ RectTransform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1466393588}
+  - {fileID: 683917604}
   - {fileID: 1582013135}
   - {fileID: 784191457}
   - {fileID: 407051666}
-  - {fileID: 683917604}
   m_Father: {fileID: 1608963126}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
@@ -915,7 +916,7 @@ RectTransform:
   m_AnchorMin: {x: 0, y: 0.5}
   m_AnchorMax: {x: 0, y: 0.5}
   m_AnchoredPosition: {x: -150, y: 150}
-  m_SizeDelta: {x: 400, y: 50}
+  m_SizeDelta: {x: 500, y: 50}
   m_Pivot: {x: 0, y: 0.5}
 --- !u!114 &1466393589
 MonoBehaviour:
