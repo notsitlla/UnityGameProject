@@ -1,27 +1,30 @@
 using UnityEngine;
+using System.Collections;
 using System.Collections.Generic;
 
 public class BoardManager : MonoBehaviour
 {
-    public static BoardManager Instance;
+    public static BoardManager Instance { get; private set; }
 
     [Header("Piece Prefabs")]
     public GameObject xPrefab;
     public GameObject oPrefab;
     public GameObject highlightPrefab;
 
-    [Header("Game State Tracking")]
-    public int activeMiniBoard = -1; 
-    public Player currentTurn = Player.X; // Clean explicit turn selector state tracking
-    public bool isGameOver = false;
-
-    // Upgraded datasets utilizing strongly typed Enums!
-    private CellState[,] globalBoardData = new CellState[9, 9]; 
-    private BoardState[] miniBoardStates = new BoardState[9];     
+    [Header("Type-Safe Tracking Collections")]
+    // 9x9 macro grid cell matrix representation (flattened to satisfy Unity serialization rules)
+    public CellState[] globalBoardData = new CellState[81];
+    // Tracking array for the 9 mini-boards
+    public BoardState[] miniBoardStates = new BoardState[9];
+    
+    [Header("Dynamic Match Parameters")]
+    public Player currentTurn;
+    public int activeMiniBoard; // -1 means global wildcard free-play
+    public bool isGameOver;
 
     [Header("Player Visual Theme Colors")]
-    public Color32 colorX = new Color32(255, 80, 90, 255);  
-    public Color32 colorO = new Color32(80, 170, 255, 255); 
+    public Color32 colorX = new Color32(235, 94, 85, 255);  
+    public Color32 colorO = new Color32(87, 166, 201, 255); 
 
     private Dictionary<int, GameObject> boardHighlightPanels = new Dictionary<int, GameObject>();
     private Dictionary<string, Cell> globalCells = new Dictionary<string, Cell>();
@@ -34,30 +37,76 @@ public class BoardManager : MonoBehaviour
 
     private void Awake()
     {
-        if (Instance == null) Instance = this;
-        else Destroy(gameObject);
+        // Strict scene-local singleton assignment 
+        Instance = this;
     }
-    
+
     private void Start()
     {
-        // Read the cross-scene mode choice set from the main menu!
-        if (GameManager.Instance != null)
-        {
-            // Assumes you have a field like 'playAgainstAI'
-            playAgainstAI = GameManager.Instance.playAgainstAI; 
-        }
-
-        if (UIManager.Instance != null)
-        {
-            UIManager.Instance.UpdateTurnDisplay(currentTurn == Player.X, colorX);
-        }
-        RefreshBoardHighlights();
+        // Explicitly trigger a clean, type-safe data flush on boot
+        ResetAndInitializeSystemState();
     }
 
     public void RegisterCell(int miniBoard, int index, Cell cell)
     {
         string key = $"{miniBoard}_{index}";
         if (!globalCells.ContainsKey(key)) globalCells.Add(key, cell);
+    }
+
+    /// <summary>
+    /// Flushes all type-safe backend matrices, arrays, tracking loops, and states.
+    /// </summary>
+    public void ResetAndInitializeSystemState()
+    {
+        Debug.Log("🧼 Performing a hard reset of all game states and visuals...");
+
+        // 1. Reset backend tracking data (Keep your existing reset arrays)
+        currentTurn = Player.X;
+        activeMiniBoard = -1; 
+        isGameOver = false;
+        isAIThinking = false;
+
+        // Initialize flattened board array and mini-board states
+        for (int i = 0; i < 81; i++) globalBoardData[i] = CellState.Empty;
+        for (int b = 0; b < 9; b++) miniBoardStates[b] = BoardState.Active;
+
+        // 2. 🌟 FOOLPROOF VISUAL WIPE: Find every cell and clear it explicitly
+        Cell[] allCells = FindObjectsByType<Cell>();
+        foreach (Cell cell in allCells)
+        {
+                if (cell != null)
+                {
+                    // Use the cell's public reset method instead of accessing private fields
+                    cell.ResetVisual();
+
+                // Loop backwards through children so destroying them doesn't break the loop index
+                for (int i = cell.transform.childCount - 1; i >= 0; i--)
+                {
+                    Transform child = cell.transform.GetChild(i);
+                    
+                    // CRITICAL SAFETY FILTER:
+                    // Only destroy the object if it is NOT your cell background or highlight outline!
+                    if (child.name.Contains("Piece") || child.name.Contains("Clone") || child.name.Contains("X") || child.name.Contains("O"))
+                    {
+                        Destroy(child.gameObject);
+                    }
+                }
+            }
+        }
+
+        // 3. 🚀 ALTERNATIVE DEEP CLEAN (Just in case pieces aren't children of the cells):
+        // Find any stray piece clones that somehow spawned out in the open scene hierarchy
+        GameObject[] strayPieces = GameObject.FindObjectsByType<GameObject>();
+        foreach (GameObject go in strayPieces)
+        {
+            if (go.name.Contains("X_Piece") || go.name.Contains("O_Piece"))
+            {
+                Destroy(go);
+            }
+        }
+
+        // 4. Force boundaries to redraw
+        RefreshBoardHighlights();
     }
 
     public void SpawnHighlightObject(int miniBoardIndex, Vector3 centerPosition)
@@ -73,16 +122,52 @@ public class BoardManager : MonoBehaviour
 
     public void OnCellClicked(Cell clickedCell)
     {
+        // Guard Gates
         if (isGameOver) return;
-
-        // 🌟 FIX: Only block Player O's inputs if we are ACTUALLY playing against the AI!
+        
+        // 🚨 CRITICAL GATEWAY FIX: Only block inputs on Player O's turn IF AI mode is enabled!
         if (currentTurn == Player.O && playAgainstAI) 
         {
-            return; // Ignore clicks only if it's the computer's turn to think
+            return; 
         }
 
-        // Delegate core move execution to a shared method so AI can call it directly
-        ExecuteMove(clickedCell);
+        int bIdx = clickedCell.miniBoardIndex;
+        int lIdx = clickedCell.localIndex;
+
+        // Rule Validation Checks
+        if (activeMiniBoard != -1 && activeMiniBoard != bIdx) return;
+        if (miniBoardStates[bIdx] != BoardState.Active) return;
+        if (GetCellState(bIdx, lIdx) != CellState.Empty) return;
+
+        // Commit Move & Spawn Token Piece
+        SetCellState(bIdx, lIdx, (currentTurn == Player.X) ? CellState.X : CellState.O);
+        clickedCell.SpawnPiece(currentTurn, currentTurn == Player.X ? colorX : colorO);
+
+        // Evaluate Rules State Win Matrices
+        CheckMiniBoardWin(bIdx, currentTurn);
+        UpdateNextPlayableBoardConstraints(lIdx);
+        CheckMacroGameWin(currentTurn);
+
+        if (isGameOver) return;
+
+        // 🚀 STEP A: Swap Turn Enum State Variable
+        currentTurn = (currentTurn == Player.X) ? Player.O : Player.X;
+
+        // 🎯 STEP B: Force the Text Header Canvas String to Refresh immediately!
+        if (UIManager.Instance != null)
+        {
+            bool isX = (currentTurn == Player.X);
+            Color32 currentTurnColor = isX ? colorX : colorO;
+            UIManager.Instance.UpdateTurnDisplay(isX, currentTurnColor);
+        }
+
+        RefreshBoardHighlights();
+
+        // 🤖 STEP C: Run AI Coroutine Processing thread only if validation rules match
+        if (currentTurn == Player.O && playAgainstAI)
+        {
+            if (!isAIThinking) StartCoroutine(TriggerComputerMoveRoutine());
+        }
     }
 
     // Core move executor — used by both human clicks and AI forced moves
@@ -95,22 +180,13 @@ public class BoardManager : MonoBehaviour
 
         if (activeMiniBoard != -1 && activeMiniBoard != bIdx) return;
         if (miniBoardStates[bIdx] != BoardState.Active) return;
-        if (globalBoardData[bIdx, lIdx] != CellState.Empty) return; 
+        if (GetCellState(bIdx, lIdx) != CellState.Empty) return; 
 
         // Apply updated enum values directly to structural storage cells
-        globalBoardData[bIdx, lIdx] = (currentTurn == Player.X) ? CellState.X : CellState.O;
+        SetCellState(bIdx, lIdx, (currentTurn == Player.X) ? CellState.X : CellState.O);
 
-        GameObject tokenPrefab = (currentTurn == Player.X) ? xPrefab : oPrefab;
-        
-        // Instantiate token under BoardManager root so it's not affected by cell transforms
-        GameObject token = Instantiate(tokenPrefab, clickedCell.transform.position, Quaternion.identity, transform);
-        token.transform.localScale = Vector3.one;
-
-        // Track spawned pieces for easier cleanup
-        spawnedPieces.Add(token);
-
-        StartCoroutine(AnimatePieceSpawn(token.transform));
-        clickedCell.ClaimCell(Color.clear); 
+        // Use the cell's SpawnPiece helper for consistent visuals
+        clickedCell.SpawnPiece(currentTurn, currentTurn == Player.X ? colorX : colorO);
 
         // 1. Process board rules and state win conditions first
         CheckMiniBoardWin(bIdx, currentTurn);
@@ -136,7 +212,7 @@ public class BoardManager : MonoBehaviour
             // 5. Finally, pass the baton if playing against the computer
             if (!isGameOver && currentTurn == Player.O && playAgainstAI)
             {
-                StartCoroutine(TriggerComputerMoveRoutine());
+                if (!isAIThinking) StartCoroutine(TriggerComputerMoveRoutine());
             }
         }
     }
@@ -156,11 +232,14 @@ public class BoardManager : MonoBehaviour
         spawnedPieces.Clear(); // Empty our lookup list
 
         // 2. Clear state variables
-        globalBoardData = new CellState[9, 9];
+        globalBoardData = new CellState[81];
+        for (int i = 0; i < 81; i++) globalBoardData[i] = CellState.Empty;
         miniBoardStates = new BoardState[9];
+        for (int b = 0; b < 9; b++) miniBoardStates[b] = BoardState.Active;
         activeMiniBoard = -1;
         currentTurn = Player.X;
         isGameOver = false;
+        isAIThinking = false;
 
         // 3. Reset cell backplates 
         foreach (var kvp in globalCells)
@@ -210,6 +289,22 @@ public class BoardManager : MonoBehaviour
         }
     }
 
+    // Flattened array helpers
+    private int FlatIndex(int board, int index)
+    {
+        return board * 9 + index;
+    }
+
+    public CellState GetCellState(int board, int index)
+    {
+        return globalBoardData[FlatIndex(board, index)];
+    }
+
+    public void SetCellState(int board, int index, CellState value)
+    {
+        globalBoardData[FlatIndex(board, index)] = value;
+    }
+
     private void CheckMiniBoardWin(int boardIndex, Player player)
     {
         CellState targetState = (player == Player.X) ? CellState.X : CellState.O;
@@ -223,11 +318,11 @@ public class BoardManager : MonoBehaviour
 
         foreach (int[] pattern in winPatterns)
         {
-            if (globalBoardData[boardIndex, pattern[0]] == targetState &&
-                globalBoardData[boardIndex, pattern[1]] == targetState &&
-                globalBoardData[boardIndex, pattern[2]] == targetState)
+            if (GetCellState(boardIndex, pattern[0]) == targetState &&
+                GetCellState(boardIndex, pattern[1]) == targetState &&
+                GetCellState(boardIndex, pattern[2]) == targetState)
             {
-                miniBoardStates[boardIndex] = (player == Player.X) ? BoardState.WonX : BoardState.WonO;
+                miniBoardStates[boardIndex] = (player == Player.X) ? BoardState.WonByX : BoardState.WonByO;
                 Debug.Log($"Sub-Grid {boardIndex} captured by {player}!");
                 DimCompletedBoard(boardIndex, player == Player.X ? colorX : colorO);
                 return;
@@ -237,9 +332,9 @@ public class BoardManager : MonoBehaviour
         bool isFull = true;
         for (int i = 0; i < 9; i++)
         {
-            if (globalBoardData[boardIndex, i] == CellState.Empty) { isFull = false; break; }
+            if (GetCellState(boardIndex, i) == CellState.Empty) { isFull = false; break; }
         }
-        if (isFull) miniBoardStates[boardIndex] = BoardState.Draw;
+        if (isFull) miniBoardStates[boardIndex] = BoardState.Tied;
     }
 
     private void DimCompletedBoard(int boardIndex, Color32 winningColor)
@@ -257,7 +352,7 @@ public class BoardManager : MonoBehaviour
 
     private void CheckMacroGameWin(Player player)
     {
-        BoardState targetWinState = (player == Player.X) ? BoardState.WonX : BoardState.WonO;
+        BoardState targetWinState = (player == Player.X) ? BoardState.WonByX : BoardState.WonByO;
 
         int[][] macroWinPatterns = new int[][]
         {
@@ -305,7 +400,7 @@ public class BoardManager : MonoBehaviour
 
             if ((activeMiniBoard == -1 || activeMiniBoard == bIdx) &&
                 miniBoardStates[bIdx] == BoardState.Active &&
-                globalBoardData[bIdx, lIdx] == CellState.Empty)
+                GetCellState(bIdx, lIdx) == CellState.Empty)
             {
                 validMoves.Add(kvp.Value);
             }
@@ -321,4 +416,21 @@ public class BoardManager : MonoBehaviour
 
         isAIThinking = false;
     }
+
+    // Spawns a token prefab at the given world position, registers it for cleanup and animates it
+    public GameObject SpawnToken(GameObject prefab, Vector3 position)
+    {
+        GameObject token = Instantiate(prefab, position, Quaternion.identity, transform);
+        token.transform.localScale = Vector3.zero;
+        spawnedPieces.Add(token);
+        StartCoroutine(AnimatePieceSpawn(token.transform));
+        return token;
+    }
+
+    // wrapper to keep your original method name available
+    private void UpdateNextPlayableBoardConstraints(int targetedLocalIndex)
+    {
+        UpdateActiveTargetZone(targetedLocalIndex);
+    }
 }
+

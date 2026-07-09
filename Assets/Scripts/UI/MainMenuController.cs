@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class MainMenuController : MonoBehaviour
 {
@@ -25,5 +26,14 @@ public class MainMenuController : MonoBehaviour
     {
         Debug.Log("🔌 Exiting match client application...");
         Application.Quit();
+    }
+
+    /// <summary>
+    /// Invoked by the gameplay HUD button to step cleanly back to the splash screen.
+    /// </summary>
+    public void ReturnToMainMenuScene()
+    {
+        Debug.Log("🏠 Tearing down match state; returning to Main Menu...");
+        SceneManager.LoadScene("MainMenu"); // Must match your menu scene asset file name exactly!
     }
 }

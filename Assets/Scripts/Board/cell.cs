@@ -113,4 +113,23 @@ public class Cell : MonoBehaviour
         }
         targetHighlightScale = Vector3.zero;
     }
+
+    // Spawn the token piece for the given player and color. Delegates instantiation to BoardManager
+    public void SpawnPiece(Player player, Color32 pieceColor)
+    {
+        if (isOccupied) return;
+
+        GameObject prefab = (player == Player.X) ? BoardManager.Instance.xPrefab : BoardManager.Instance.oPrefab;
+        GameObject token = BoardManager.Instance.SpawnToken(prefab, transform.position);
+
+        // Attempt to color the spawned token if it contains a SpriteRenderer
+        SpriteRenderer tokSr = token.GetComponent<SpriteRenderer>();
+        if (tokSr != null)
+        {
+            tokSr.color = pieceColor;
+        }
+
+        // Finally, claim this cell visually
+        ClaimCell(Color.clear);
+    }
 }
