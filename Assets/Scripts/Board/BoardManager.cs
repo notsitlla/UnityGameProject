@@ -287,27 +287,22 @@ public class BoardManager : MonoBehaviour
     private System.Collections.IEnumerator TriggerComputerMoveRoutine()
     {
         isAIThinking = true;
-        yield return new WaitForSeconds(0.6f); 
+        yield return new WaitForSeconds(0.6f); // Illusion of "thinking" time
 
-        List<Cell> validMoves = new List<Cell>();
-
-        foreach (var kvp in globalCells)
+        if (!isGameOver && AIPlayer.Instance != null)
         {
-            int bIdx = kvp.Value.miniBoardIndex;
-            int lIdx = kvp.Value.localIndex;
+            // Request the best move from the AIPlayer subsystem
+            Cell aiChoice = AIPlayer.Instance.GetBestMove(
+                activeMiniBoard, 
+                globalBoardData, 
+                miniBoardStates, 
+                globalCells
+            );
 
-            if ((activeMiniBoard == -1 || activeMiniBoard == bIdx) &&
-                miniBoardStates[bIdx] == BoardState.Active &&
-                globalBoardData[bIdx, lIdx] == CellState.Empty)
+            if (aiChoice != null)
             {
-                validMoves.Add(kvp.Value);
+                OnCellClicked(aiChoice, true);
             }
-        }
-
-        if (validMoves.Count > 0 && !isGameOver)
-        {
-            Cell randomChoice = validMoves[Random.Range(0, validMoves.Count)];
-            OnCellClicked(randomChoice, true);
         }
 
         isAIThinking = false;

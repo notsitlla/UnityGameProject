@@ -14,7 +14,7 @@ public class AIPlayer : MonoBehaviour
     /// <summary>
     /// Evaluates the board parameters and returns a valid cell for the computer to play.
     /// </summary>
-    public Cell GetBestMove(int activeMiniBoard, CellState[] boardData, BoardState[] miniBoardStates, Dictionary<string, Cell> cellMap)
+    public Cell GetBestMove(int activeMiniBoard, CellState[,] boardData, BoardState[] miniBoardStates, Dictionary<string, Cell> cellMap)
     {
         List<Cell> legalMoves = new List<Cell>();
 
@@ -26,8 +26,8 @@ public class AIPlayer : MonoBehaviour
 
             for (int i = 0; i < 9; i++)
             {
-                int idx = b * 9 + i;
-                if (boardData[idx] == CellState.Empty)
+                // Corrected to read from the 2D array structure
+                if (boardData[b, i] == CellState.Empty)
                 {
                     string key = $"{b}_{i}";
                     if (cellMap.TryGetValue(key, out Cell c))
