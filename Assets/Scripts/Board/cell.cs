@@ -70,14 +70,14 @@ public class Cell : MonoBehaviour
 
     private void OnMouseDown()
     {
+        // If the cell is already played, block further clicks
         if (isOccupied) return;
 
-        int activeBoard = BoardManager.Instance.activeMiniBoard;
-        if (activeBoard != -1 && activeBoard != miniBoardIndex) return;
-
-        // Collapse overlay visual instantly when confirmed click drops
-        targetHighlightScale = Vector3.zero;
-        BoardManager.Instance.OnCellClicked(this);
+        // Route the click directly to the central BoardManager state engine
+        if (BoardManager.Instance != null)
+        {
+            BoardManager.Instance.OnCellClicked(this);
+        }
     }
 
     public void ClaimCell(Color playerColor)
@@ -114,22 +114,6 @@ public class Cell : MonoBehaviour
         targetHighlightScale = Vector3.zero;
     }
 
-    // Spawn the token piece for the given player and color. Delegates instantiation to BoardManager
-    public void SpawnPiece(Player player, Color32 pieceColor)
-    {
-        if (isOccupied) return;
-
-        GameObject prefab = (player == Player.X) ? BoardManager.Instance.xPrefab : BoardManager.Instance.oPrefab;
-        GameObject token = BoardManager.Instance.SpawnToken(prefab, transform.position);
-
-        // Attempt to color the spawned token if it contains a SpriteRenderer
-        SpriteRenderer tokSr = token.GetComponent<SpriteRenderer>();
-        if (tokSr != null)
-        {
-            tokSr.color = pieceColor;
-        }
-
-        // Finally, claim this cell visually
-        ClaimCell(Color.clear);
-    }
+    // NOTE: Token instantiation is centralized in BoardManager. Any legacy direct-spawn logic
+    // was removed from the cell to keep the visual/state responsibilities separated.
 }

@@ -681,7 +681,7 @@ MonoBehaviour:
       m_Calls:
       - m_Target: {fileID: 1291314029}
         m_TargetAssemblyTypeName: BoardManager, Assembly-CSharp
-        m_MethodName: ResetAndInitializeSystemState
+        m_MethodName: ResetUltimateMatch
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -905,9 +905,8 @@ MonoBehaviour:
   xPrefab: {fileID: 2780653350214406368, guid: 9f09a98851e334171ae6f7e71910d2fe, type: 3}
   oPrefab: {fileID: 773711687185149414, guid: 4d00eeaab98af4f10aace32d46a2aee9, type: 3}
   highlightPrefab: {fileID: 1757134573545360614, guid: f71b2d28c39ec4bd6b7016b6e9c81ad2, type: 3}
-  miniBoardStates: 000000000000000000000000000000000000000000000000000000000000000000000000
-  currentTurn: 1
   activeMiniBoard: -1
+  currentTurn: 1
   isGameOver: 0
   colorX:
     serializedVersion: 2
